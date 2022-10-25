@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title></title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+
+  <body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.70/pdfmake.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.worker.min.js"></script>
+    <script src="https://cozmo.github.io/jsQR/jsQR.js"></script>
+    <!-- <script src="https://mozilla.github.io/pdf.js/build/pdf.js"></script> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/1.3.4/jspdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.70/pdfmake.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.70/vfs_fonts.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-Zenh87qX5JnK2Jl0vWa8Ck2rdkQ2Bzep5IDxbcnCeuOxjzrPF/et3URy9Bv1WTRi" crossorigin="anonymous">
+
+    <input type="file" id="file-pdf" accept=".pdf" style="margin-left: 40%; margin-top: 10%;" />
+    <br />
+    <br />
+    <h2 style="margin-left: 40%;">Output Data</h2>
+    <div><pre id="output"></pre></div>
+    <br />
+    <br />
+    <h2 style="margin-left: 40%;">Extracted Image Canvas</h2>
+    <canvas id="canvas" style="border: 1px solid black; margin-left: 40%;"></canvas>
+
+    <img id="page-image" src="" />
+    <script>
+      let images = [];
+      let pages = [];
+      console.clear();
+      function addAlphaChannelToUnit8ClampedArray(
+        unit8Array,
+        imageWidth,
+        imageHeight
+      ) {
+        const newImageData = new Uint8ClampedArray(
+          imageWidth * imageHeight * 4
+        );
+
+        for (let j = 0, k = 0, jj = imageWidth * imageHeight * 4; j < jj; ) {
+          newImageData[j++] = unit8Array[k++];
+          newImageData[j++] = unit8Array[k++];
+          newImageData[j++] = unit8Array[k++];
+          newImageData[j++] = 255;
+        }
+        return newImageData;
+      }
+
+      async function getPageImages(pageNum, pdfDocumentInstance) {
+        try {
+          const pdfPage = await pdfDocumentInstance.getPage(pageNum);
+          const operatorList = await pdfPage.getOperatorList();
+
+          const validObjectTypes = [
+            pdfjsLib.OPS.paintImageXObject, // 85
+            pdfjsLib.OPS.paintImageXObjectRepeat, // 88
+            pdfjsLib.OPS.paintJpegXObject //82
+          ];
+
+          operatorList.fnArray.forEach((element, idx) => {
+            if (validObjectTypes.includes(element)) {
+              const imageName = operatorList.argsArray[idx][0];
+              console.log("page", pageNum, "imageName", imageName);
+              pages.push(pageNum);
+              console.log(pages);
+              pdfPage.objs.get(imageName, async (image) => {
+                // Uint8ClampedArray
+
+                const imageUnit8Array = image.data;
+                const imageWidth = image.width;
+                const imageHeight = image.height;
+                // console.log('image', image);
+
+                // imageUnit8Array contains only RGB need add alphaChanel
+                const imageUint8ArrayWithAlphaChanel = addAlphaChannelToUnit8ClampedArray(
+                  imageUnit8Array,
+                  imageWidth,
+                  imageHeight
+                );
+
+                const imageData = new ImageData(
+                  imageUint8ArrayWithAlphaChanel,
+                  imageWidth,
+                  imageHeight
+                );
+
+                const canvas = document.getElementById("canvas");
+                canvas.width = imageWidth;
+                canvas.height = imageHeight;
+                var img = new Image();
+                img.src = canvas.toDataURL("image/jpeg");
+                const ctx = canvas.getContext("2d");
+                ctx.putImageData(imageData, 0, 0);
+                images.push(canvas.toDataURL("image/jpeg"));
+                // console.log('canvas > toDataURL', canvas.toDataURL());
+                // console.log("ddddddd", img.src);
+                let imgFinding = [];
+                console.log(Math.random(360));
+                for (let k = 0; k < images.length; k++) {
+                  imgFinding.push({
+                    image: images[k],
+                    width: 900,
+                    height: 1000
+                  });
+                  console.log(imgFinding);
+                }
+                var docDefinition = {
+                  watermark: {
+                    text: "Tekab.dev",
+                    color: "blue",
+                    opacity: 0.3,
+                    bold: true,
+                    italics: false,
+                    angle: Math.floor(Math.random() * 365)
+                  },
+                  pageSize: {
+                    width: 900,
+                    height: 1000
+                  },
+                  pageOrientation: "paysage",
+                  // [left, top, right, bottom] or [horizontal, vertical] or just a number for equal margins
+                  // pageMargins: [-40, -30, 30, 10],
+                  content: [imgFinding]
+                };
+                // Save the PDF
+
+                pdfMake.pageLayout = {
+                  height: 1000,
+                  width: 1000,
+                  margins: Array(10).fill(72)
+                };
+                // }
+                x = images.length;
+                console.log(x - 1);
+                if ((await imgFinding.length) === (await pages.length)) {
+                  console.log(
+                    (await pages.length) === (await imgFinding.length)
+                  );
+                  const pdfDocGenerator = pdfMake
+                    .createPdf(docDefinition)
+                    .download("TekabDev");
+                }
+                const decodedData = jsQR(
+                  imageUint8ArrayWithAlphaChanel,
+                  imageWidth,
+                  imageHeight
+                );
+
+                if (decodedData) {
+                  const outputElement = document.getElementById("output");
+                  outputElement.innerHTML += `${JSON.stringify(
+                    decodedData.data,
+                    null,
+                    2
+                  )}\n`;
+                  console.log("decodedData", decodedData.data);
+                }
+              });
+            }
+          });
+        } catch (error) {
+          console.log(error);
+        }
+      }
+
+      const onLoadFile = async (event) => {
+        try {
+          // turn array buffer into typed array
+          const typedArray = new Uint8Array(event.target.result);
+
+          const loadingPdfDocument = pdfjsLib.getDocument(typedArray);
+          const pdfDocumentInstance = await loadingPdfDocument.promise;
+
+          const totalNumPages = pdfDocumentInstance.numPages;
+          const pagesPromises = [];
+
+          for (
+            let currentPage = 1;
+            currentPage <= totalNumPages;
+            currentPage += 1
+          ) {
+            pagesPromises.push(getPageImages(currentPage, pdfDocumentInstance));
+          }
+
+          const pagesData = await Promise.all(pagesPromises);
+          console.log(pagesPromises);
+          // console.log(pagesData);
+        } catch (error) {
+          console.log(error);
+        }
+      };
+
+      document
+        .getElementById("file-pdf")
+        .addEventListener("change", (event) => {
+          const file = event.target.files[0];
+
+          if (file.type !== "application/pdf") {
+            alert(`File ${file.name} is not a PDF file type`);
+            return;
+          }
+
+          const fileReader = new FileReader();
+          fileReader.onload = onLoadFile;
+          fileReader.readAsArrayBuffer(file);
+        });
+    </script>
+  </body>
+</html>
